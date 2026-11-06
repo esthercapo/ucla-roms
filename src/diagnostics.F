@@ -320,6 +320,10 @@
       call store_string_att(diagnostic_opt, 'Chosen Diagnostics = ')
       if (diag_uv) call store_string_att(diagnostic_opt, 'Momentum')
       if (diag_trc) call store_string_att(diagnostic_opt, ', Tracers')
+#ifdef DIAGNOSTICS_WI
+      if (diag_trc) call store_string_att(diagnostic_opt,
+     & '(Wi split: advz incl. implicit Wi flux)')
+#endif
       if (diag_pflx) call store_string_att(diagnostic_opt,
      & ', Baroclinic Pressure Fluxes')
 
@@ -1199,11 +1203,21 @@
            dimsizes = (/ xi_rho, eta_rho, nz+1,   0/)
            vname = trim(t_vname(it)) // '_advz'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+#ifdef DIAGNOSTICS_WI
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'z-advective flux (We explicit + Wi implicit upwind)')
+#else
            ierr = nf90_put_att(ncid,varid,'long_name','z-advective flux')
+#endif
            ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
            vname = trim(t_vname(it)) // '_mixz'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+#ifdef DIAGNOSTICS_WI
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'mixing z-flux (excl. implicit Wi advection)')
+#else
            ierr = nf90_put_att(ncid,varid,'long_name','mixing z-flux')
+#endif
            ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
 
           endif

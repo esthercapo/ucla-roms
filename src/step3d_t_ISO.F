@@ -996,6 +996,19 @@ c??         enddo
                 ZFlx(i,k)= VFlxD(i,k)/(pm(i,j)*pn(i,j)) + ZFlx(i,k-1)
               enddo
             enddo
+#  ifdef DIAGNOSTICS_WI
+            ! Add the implicit Wi advective flux to tadvz: upwind on the
+            ! new tracer, exactly as applied by the implicit solve above
+            ! (top face of cell k, Wi(nz)=0). tmixz below is computed as
+            ! ZFlx - tadvz and therefore no longer contains it.
+            do k=1,nz-1
+              do i=1,nx
+                Tdiag(i,j,k,tadvz,td(itrc)) = Tdiag(i,j,k,tadvz,td(itrc))
+     &                       +max(Wi(i,j,k),0.)*t(i,j,k  ,nnew,itrc)
+     &                       +min(Wi(i,j,k),0.)*t(i,j,k+1,nnew,itrc)
+              enddo
+            enddo
+#  endif
             if (j==20.and.mynode==0) then
 !              print *,maxval(Tdiag(1:nx,j,:,tmixz,td(itrc)))
             endif
