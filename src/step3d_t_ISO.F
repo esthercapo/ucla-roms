@@ -763,6 +763,28 @@ c**               cff=1./(z_r(i,j,k+1)-z_r(i,j,k))
                   Tdiag(i,j,k,tmixz,td(itrc)) = -FSC(i,j,k2)/(pm(i,j)*pn(i,j))
                 enddo
               enddo
+#  ifdef DIAGNOSTICS_WI_TERMS
+              ! Isoneutral z-flux (the value tmixz starts from) and the
+              ! explicit anti-diffusive -Akz term inside it (on ntdf).
+              do j=1,ny
+                do i=1,nx
+                  Tdiag(i,j,k,tdifiso,td(itrc)) =
+     &                                -FSC(i,j,k2)/(pm(i,j)*pn(i,j))
+                  Tdiag(i,j,k,tdifakzex,td(itrc)) = 0.
+                enddo
+              enddo
+#   ifdef STABILIZE
+              if (k < nz) then
+                do j=1,ny
+                  do i=1,nx
+                    Tdiag(i,j,k,tdifakzex,td(itrc)) = 2.*Akz(i,j,k)
+     &                 *( t(i,j,k+1,ntdf,itrc)-t(i,j,k,ntdf,itrc) )
+     &                 /( (Hz(i,j,k+1)+Hz(i,j,k))*pm(i,j)*pn(i,j) )
+                  enddo
+                enddo
+              endif
+#   endif
+#  endif
             endif
 
           endif   !<-- k > 0
@@ -890,6 +912,21 @@ c??         enddo
 #  endif
           endif
 
+#  ifdef DIAGNOSTICS_WI_TERMS
+          ! Content change due to the explicit forcing applied since
+          ! the VFlxD snapshot (pipes, swflx heat, stflx, srflx, ghat):
+          ! (content after the We step) - (content now), per dt.
+          if (diag_trc.and.wrt_t_dia(itrc) ) then
+            do k=1,nz
+              do i=1,nx
+                VFlxF(i,k) = ( VFlxD(i,k) -dt*pm(i,j)*pn(i,j)
+     &                                       *(FC(i,k)-FC(i,k-1))
+     &                        -t(i,j,k,nnew,itrc) )/dt
+              enddo
+            enddo
+          endif
+#  endif
+
 ! Perform an implicit time step for vertical diffusion
 !
 !   dq(k)     1     [         q(k+1)-q(k)             q(k)-q(k-1) ]
@@ -1006,6 +1043,51 @@ c??         enddo
                 Tdiag(i,j,k,tadvz,td(itrc)) = Tdiag(i,j,k,tadvz,td(itrc))
      &                       +max(Wi(i,j,k),0.)*t(i,j,k  ,nnew,itrc)
      &                       +min(Wi(i,j,k),0.)*t(i,j,k+1,nnew,itrc)
+              enddo
+            enddo
+#  endif
+#  ifdef DIAGNOSTICS_WI_TERMS
+            ! Optional parts, C m^3/s, top face of cell k, positive up:
+            ! tmixz = tdifiso + tdifakt + tdifakz + tforcz (round-off).
+            ! tvale, tvali are cell values (Wi value terms).
+            do k=1,nz-1
+              do i=1,nx
+                Tdiag(i,j,k,tadvwi,td(itrc)) =
+     &                        max(Wi(i,j,k),0.)*t(i,j,k  ,nnew,itrc)
+     &                       +min(Wi(i,j,k),0.)*t(i,j,k+1,nnew,itrc)
+                cff=2.*( t(i,j,k,nnew,itrc)-t(i,j,k+1,nnew,itrc) )
+     &              /( (Hz(i,j,k)+Hz(i,j,k+1))*pm(i,j)*pn(i,j) )
+                Tdiag(i,j,k,tdifakt,td(itrc)) = cff*Akt(i,j,k)
+#   if defined ADV_ISONEUTRAL && defined STABILIZE
+                Tdiag(i,j,k,tdifakz,td(itrc)) = cff*Akz(i,j,k)
+#   endif
+              enddo
+            enddo
+            do i=1,nx
+              Tdiag(i,j,nz,tadvwi ,td(itrc)) = 0.
+              Tdiag(i,j,nz,tdifakt,td(itrc)) = 0.
+              Tdiag(i,j,nz,tdifakz,td(itrc)) = 0.
+            enddo
+            do k=1,nz
+              do i=1,nx
+                Tdiag(i,j,k,tvale,td(itrc)) = t(i,j,k,nnew,itrc)*(
+     &                    FlxU(i+1,j,k)-FlxU(i,j,k)
+     &                   +FlxV(i,j+1,k)-FlxV(i,j,k)
+     &                   +We(i,j,k)-We(i,j,k-1) )
+                Tdiag(i,j,k,tvali,td(itrc)) = t(i,j,k,nnew,itrc)*(
+     &                    Wi(i,j,k)-Wi(i,j,k-1) )
+              enddo
+            enddo
+            ! Forcing part: VFlxF converted to w-point fluxes as ZFlx
+            do i=1,nx
+              Tdiag(i,j,1,tforcz,td(itrc)) =
+     &                          VFlxF(i,1)/(pm(i,j)*pn(i,j))
+            enddo
+            do k=2,nz
+              do i=1,nx
+                Tdiag(i,j,k,tforcz,td(itrc)) =
+     &                          VFlxF(i,k)/(pm(i,j)*pn(i,j))
+     &                         +Tdiag(i,j,k-1,tforcz,td(itrc))
               enddo
             enddo
 #  endif

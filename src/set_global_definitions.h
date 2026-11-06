@@ -93,6 +93,13 @@ c--#define KEEP_CORIOLIS
 # define SPLIT_EOS
 #endif
 
+/* The optional W_i split terms of the tracer diagnostics require the
+ W_i split of advz/mixz itself (diagnostics.F, step3d_t_ISO.F). */
+
+#if defined DIAGNOSTICS_WI_TERMS && !defined DIAGNOSTICS_WI
+# define DIAGNOSTICS_WI
+#endif
+
 
 
 
