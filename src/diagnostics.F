@@ -74,7 +74,13 @@
       ! Tracers:
       ! --------
 
+#if defined DIAG_TRC_VMIX_FULL
+      integer,parameter :: ntd = 12  ! number of tracer diag terms
+#elif defined DIAG_TRC_VMIX
+      integer,parameter :: ntd = 8   ! number of tracer diag terms
+#else
       integer,parameter :: ntd = 7   ! number of tracer diag terms
+#endif
       integer,parameter, public ::
      &  tadvx = 1, ! Advection in x-direction
      &  tadvy = 2, ! Advection in y-direction
@@ -82,9 +88,30 @@
      &  tmixx = 4, ! Mixing in x-direction
      &  tmixy = 5, ! Mixing in y-direction
      &  tmixz = 6  ! Mixing in z-direction
+#ifdef DIAG_TRC_VMIX
+      ! Optional parts of tmixz (step3d_t_ISO.F): z-fluxes at w-points,
+      ! C m^3/s, positive up. With the full set, to round-off,
+      ! mixz = dif_akt + dif_akz + dif_iso_z + forc_z + NUM, where
+      ! NUM = FC(We) + advwi - advz is the numerical part of the
+      ! vertical advection (scheme minus C4(We+Wi)). dif_akz_ex is a
+      ! sub-part of dif_iso_z, not a separate summand.
+      integer,parameter, public ::
+     &  tdifakt   = 7   ! implicit vertical diffusion, Akt part
+# ifdef DIAG_TRC_VMIX_FULL
+      integer,parameter, public ::
+     &  tdifiso   = 8,  ! isoneutral z-flux, incl. explicit -Akz term
+     &  tdifakz   = 9,  ! implicit vertical diffusion, Akz part
+     &  tdifakzex = 10, ! explicit -Akz term (part of tdifiso)
+     &  tadvwi    = 11, ! implicit Wi flux, upwind on t_new, as applied
+     &  tforcz    = 12  ! pipe, swflx, stflx, srflx, ghat forcing
+# endif
+#endif
 
       real,public,allocatable,dimension(:,:) :: VFlxD     ! Divergence of implicit mixing related vertical fluxes
       real,public,allocatable,dimension(:,:) :: ZFlx      ! Implicit mixing related vertical fluxes
+#ifdef DIAG_TRC_VMIX_FULL
+      real,public,allocatable,dimension(:,:) :: VFlxF     ! Divergence of explicit forcing fluxes
+#endif
       real,public,allocatable,dimension(:,:,:,:,:) :: Tdiag     ! tracer diagnostic terms
       real,allocatable,dimension(:,:,:,:,:) :: Tdiag_avg ! averages of tracer diagnostic terms
       integer                               :: ntdia     ! number of tracers for which to do diagnostics
@@ -248,6 +275,10 @@
         VFlxD = 0
         allocate(ZFlx(0:nx+1,nz))
         ZFlx = 0
+#ifdef DIAG_TRC_VMIX_FULL
+        allocate(VFlxF(0:nx+1,nz))
+        VFlxF = 0
+#endif
         if (diag_avg) then
           allocate(Tdiag_avg(0:nx+1,0:ny+1,0:nz,ntd,ntdia))
           Tdiag_avg = 0
@@ -320,6 +351,14 @@
       call store_string_att(diagnostic_opt, 'Chosen Diagnostics = ')
       if (diag_uv) call store_string_att(diagnostic_opt, 'Momentum')
       if (diag_trc) call store_string_att(diagnostic_opt, ', Tracers')
+#if defined DIAG_TRC_VMIX_FULL
+      if (diag_trc) call store_string_att(diagnostic_opt,
+     & ' (with mixz parts: dif_akt, dif_akz, dif_iso_z, dif_akz_ex,'
+     & //' advwi, forc_z)')
+#elif defined DIAG_TRC_VMIX
+      if (diag_trc) call store_string_att(diagnostic_opt,
+     & ' (with mixz part: dif_akt)')
+#endif
       if (diag_pflx) call store_string_att(diagnostic_opt,
      & ', Baroclinic Pressure Fluxes')
 
@@ -1199,12 +1238,58 @@
            dimsizes = (/ xi_rho, eta_rho, nz+1,   0/)
            vname = trim(t_vname(it)) // '_advz'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+#ifdef DIAG_TRC_VMIX
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'z-advective flux, C4 with We+Wi')
+#else
            ierr = nf90_put_att(ncid,varid,'long_name','z-advective flux')
+#endif
            ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
            vname = trim(t_vname(it)) // '_mixz'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+#ifdef DIAG_TRC_VMIX
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'mixing z-flux, physical + numerical (scheme - C4)')
+#else
            ierr = nf90_put_att(ncid,varid,'long_name','mixing z-flux')
+#endif
            ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
+#ifdef DIAG_TRC_VMIX
+           vname = trim(t_vname(it)) // '_dif_akt'
+           varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'implicit vertical diffusion z-flux, Akt part')
+           ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
+#endif
+#ifdef DIAG_TRC_VMIX_FULL
+           ! mixz = dif_akt + dif_akz + dif_iso_z + forc_z
+           !      + (FC(We) + advwi - advz)
+           vname = trim(t_vname(it)) // '_dif_akz'
+           varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'implicit vertical diffusion z-flux, Akz part')
+           ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
+           vname = trim(t_vname(it)) // '_dif_iso_z'
+           varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'isoneutral z-flux, incl. explicit -Akz term')
+           ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
+           vname = trim(t_vname(it)) // '_dif_akz_ex'
+           varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'explicit -Akz z-flux (part of dif_iso_z)')
+           ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
+           vname = trim(t_vname(it)) // '_advwi'
+           varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'implicit Wi z-flux, upwind on new tracer, as applied')
+           ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
+           vname = trim(t_vname(it)) // '_forc_z'
+           varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
+           ierr = nf90_put_att(ncid,varid,'long_name',
+     &       'forcing z-flux (pipes, swflx, stflx, srflx, ghat)')
+           ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
+#endif
 
           endif
         enddo
@@ -1298,6 +1383,22 @@
           call ncwrite(ncid,trim(t_vname(it))//'_mixy' ,trcd(i0:i1, 1:j1,1:nz,5,td(it)),start)
           call ncwrite(ncid,trim(t_vname(it))//'_advz' ,trcd(i0:i1,j0:j1,0:nz,3,td(it)),start)
           call ncwrite(ncid,trim(t_vname(it))//'_mixz' ,trcd(i0:i1,j0:j1,0:nz,6,td(it)),start)
+#ifdef DIAG_TRC_VMIX
+          call ncwrite(ncid,trim(t_vname(it))//'_dif_akt',
+     &            trcd(i0:i1,j0:j1,0:nz,tdifakt,td(it)),start)
+#endif
+#ifdef DIAG_TRC_VMIX_FULL
+          call ncwrite(ncid,trim(t_vname(it))//'_dif_akz',
+     &            trcd(i0:i1,j0:j1,0:nz,tdifakz,td(it)),start)
+          call ncwrite(ncid,trim(t_vname(it))//'_dif_iso_z',
+     &            trcd(i0:i1,j0:j1,0:nz,tdifiso,td(it)),start)
+          call ncwrite(ncid,trim(t_vname(it))//'_dif_akz_ex',
+     &            trcd(i0:i1,j0:j1,0:nz,tdifakzex,td(it)),start)
+          call ncwrite(ncid,trim(t_vname(it))//'_advwi',
+     &            trcd(i0:i1,j0:j1,0:nz,tadvwi,td(it)),start)
+          call ncwrite(ncid,trim(t_vname(it))//'_forc_z',
+     &            trcd(i0:i1,j0:j1,0:nz,tforcz,td(it)),start)
+#endif
         endif
       enddo
 

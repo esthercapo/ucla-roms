@@ -93,6 +93,14 @@ c--#define KEEP_CORIOLIS
 # define SPLIT_EOS
 #endif
 
+/* Optional parts of the tracer z-mixing diagnostic (diagnostics.F,
+ step3d_t_ISO.F): DIAG_TRC_VMIX adds the implicit Akt flux; the full
+ set DIAG_TRC_VMIX_FULL adds the remaining parts and implies it. */
+
+#if defined DIAG_TRC_VMIX_FULL && !defined DIAG_TRC_VMIX
+# define DIAG_TRC_VMIX
+#endif
+
 
 
 
