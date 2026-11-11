@@ -1267,7 +1267,9 @@
            vname = trim(t_vname(it)) // '_dif_akz'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
            ierr = nf90_put_att(ncid,varid,'long_name',
-     &       'implicit vertical diffusion z-flux, Akz part')
+     &       'implicit vertical diffusion z-flux, Akz part;'//
+     &       ' nearly cancels dif_akz_ex, dif_iso_z + dif_akz'//
+     &       ' is the meaningful combination')
            ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
            vname = trim(t_vname(it)) // '_dif_iso_z'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
@@ -1277,7 +1279,9 @@
            vname = trim(t_vname(it)) // '_dif_akz_ex'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
            ierr = nf90_put_att(ncid,varid,'long_name',
-     &       'explicit -Akz z-flux (part of dif_iso_z)')
+     &       'explicit -Akz z-flux (part of dif_iso_z);'//
+     &       ' nearly cancels dif_akz, dif_iso_z + dif_akz'//
+     &       ' is the meaningful combination')
            ierr = nf90_put_att(ncid,varid,'units','C m^3/s')
            vname = trim(t_vname(it)) // '_advwi'
            varid = nccreate(ncid,vname,dimnames,dimsizes,diag_prec)
